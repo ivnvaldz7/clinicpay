@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Pencil, PowerOff, Trash2, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Pencil, PowerOff, Trash2, Users, Download } from "lucide-react";
 import { patientsApi } from "@/api/patients.api";
 import { useAuthStore } from "@/store/auth.store";
+import { useToast } from "@/hooks/useToast";
+import { exportToCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogClose,
 } from "@/components/ui/dialog";
@@ -24,7 +28,23 @@ const Field = ({ label, children }) => (
   </div>
 );
 
+const TableSkeleton = () => (
+  <div className="divide-y">
+    {Array.from({ length: 6 }).map((_, i) => (
+      <div key={i} className="flex items-center gap-4 px-4 py-3">
+        <Skeleton className="h-4 w-36" />
+        <Skeleton className="h-4 w-44" />
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-4 w-20" />
+        <Skeleton className="h-5 w-16 rounded-full" />
+      </div>
+    ))}
+  </div>
+);
+
 export const PatientsPage = () => {
+  const navigate = useNavigate();
+  const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
   const isAdmin = role === "clinic_admin";
 
@@ -35,7 +55,7 @@ export const PatientsPage = () => {
   const [loading, setLoading] = useState(true);
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState(null); // Patient object | null
+  const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -54,7 +74,6 @@ export const PatientsPage = () => {
     }
   }, [search, activeFilter]);
 
-  // Debounce search
   useEffect(() => {
     const t = setTimeout(() => load(1), 300);
     return () => clearTimeout(t);
@@ -67,7 +86,8 @@ export const PatientsPage = () => {
     setDialogOpen(true);
   };
 
-  const openEdit = (patient) => {
+  const openEdit = (e, patient) => {
+    e.stopPropagation();
     setEditing(patient);
     setForm({
       name: patient.name,
@@ -87,8 +107,10 @@ export const PatientsPage = () => {
     try {
       if (editing) {
         await patientsApi.update(editing._id, form);
+        toast.success("Paciente actualizado");
       } else {
         await patientsApi.create(form);
+        toast.success("Paciente creado");
       }
       setDialogOpen(false);
       load(pagination.page);
@@ -99,15 +121,38 @@ export const PatientsPage = () => {
     }
   };
 
-  const handleToggle = async (patient) => {
-    await patientsApi.toggleActive(patient._id);
-    load(pagination.page);
+  const handleToggle = async (e, patient) => {
+    e.stopPropagation();
+    try {
+      await patientsApi.toggleActive(patient._id);
+      toast.success(patient.isActive ? "Paciente desactivado" : "Paciente activado");
+      load(pagination.page);
+    } catch {
+      toast.error("Error al cambiar estado");
+    }
   };
 
-  const handleDelete = async (patient) => {
+  const handleDelete = async (e, patient) => {
+    e.stopPropagation();
     if (!confirm(`¿Eliminar a ${patient.name}? Esta acción no se puede deshacer.`)) return;
-    await patientsApi.delete(patient._id);
-    load(pagination.page);
+    try {
+      await patientsApi.delete(patient._id);
+      toast.success("Paciente eliminado");
+      load(pagination.page);
+    } catch {
+      toast.error("Error al eliminar");
+    }
+  };
+
+  const handleExport = () => {
+    exportToCsv(`pacientes-${new Date().toISOString().slice(0, 10)}.csv`, patients, [
+      { label: "Nombre",   getValue: (p) => p.name },
+      { label: "Email",    getValue: (p) => p.email ?? "" },
+      { label: "Teléfono", getValue: (p) => p.phone ?? "" },
+      { label: "DNI",      getValue: (p) => p.dni ?? "" },
+      { label: "Estado",   getValue: (p) => p.isActive ? "Activo" : "Inactivo" },
+    ]);
+    toast.success("Exportado correctamente");
   };
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -118,9 +163,16 @@ export const PatientsPage = () => {
         title="Pacientes"
         description={`${pagination.total} paciente${pagination.total !== 1 ? "s" : ""} registrado${pagination.total !== 1 ? "s" : ""}`}
         action={
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4" /> Nuevo paciente
-          </Button>
+          <div className="flex gap-2">
+            {patients.length > 0 && (
+              <Button variant="outline" size="sm" onClick={handleExport}>
+                <Download className="h-4 w-4" /> Exportar
+              </Button>
+            )}
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4" /> Nuevo paciente
+            </Button>
+          </div>
         }
       />
 
@@ -142,9 +194,7 @@ export const PatientsPage = () => {
       {/* Table */}
       <div className="rounded-xl border bg-card">
         {loading ? (
-          <div className="flex h-48 items-center justify-center">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          </div>
+          <TableSkeleton />
         ) : patients.length === 0 ? (
           <EmptyState
             icon={Users}
@@ -167,7 +217,11 @@ export const PatientsPage = () => {
               </thead>
               <tbody className="divide-y">
                 {patients.map((p) => (
-                  <tr key={p._id} className="group hover:bg-muted/40 transition-colors">
+                  <tr
+                    key={p._id}
+                    className="group hover:bg-muted/40 transition-colors cursor-pointer"
+                    onClick={() => navigate(`/patients/${p._id}`)}
+                  >
                     <td className="px-4 py-3 font-medium">{p.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{p.email ?? "—"}</td>
                     <td className="px-4 py-3 text-muted-foreground">{p.phone ?? "—"}</td>
@@ -179,26 +233,14 @@ export const PatientsPage = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          title="Editar"
-                          onClick={() => openEdit(p)}
-                          className="rounded p-1 hover:bg-accent"
-                        >
+                        <button title="Editar" onClick={(e) => openEdit(e, p)} className="rounded p-1 hover:bg-accent">
                           <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
                         </button>
-                        <button
-                          title={p.isActive ? "Desactivar" : "Activar"}
-                          onClick={() => handleToggle(p)}
-                          className="rounded p-1 hover:bg-accent"
-                        >
+                        <button title={p.isActive ? "Desactivar" : "Activar"} onClick={(e) => handleToggle(e, p)} className="rounded p-1 hover:bg-accent">
                           <PowerOff className="h-3.5 w-3.5 text-muted-foreground" />
                         </button>
                         {isAdmin && (
-                          <button
-                            title="Eliminar"
-                            onClick={() => handleDelete(p)}
-                            className="rounded p-1 hover:bg-destructive/10"
-                          >
+                          <button title="Eliminar" onClick={(e) => handleDelete(e, p)} className="rounded p-1 hover:bg-destructive/10">
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </button>
                         )}

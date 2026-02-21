@@ -6,4 +6,5 @@ export const authApi = {
   refresh: () => api.post("/auth/refresh"),
   logout: () => api.post("/auth/logout"),
   me: () => api.get("/auth/me"),
+  demoLogin: () => api.post("/auth/demo"),
 };

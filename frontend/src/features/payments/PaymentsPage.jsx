@@ -1,14 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
-import { Plus, CreditCard, Trash2 } from "lucide-react";
+import { Plus, CreditCard, Trash2, Download } from "lucide-react";
 import { paymentsApi } from "@/api/payments.api";
 import { invoicesApi } from "@/api/invoices.api";
 import { useAuthStore } from "@/store/auth.store";
+import { useToast } from "@/hooks/useToast";
+import { exportToCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody, DialogFooter, DialogClose,
 } from "@/components/ui/dialog";
@@ -19,33 +22,14 @@ import { Combobox } from "@/components/shared/Combobox";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-const METHOD_LABEL = {
-  cash: "Efectivo",
-  transfer: "Transferencia",
-  stripe: "Stripe",
-  mercadopago: "MercadoPago",
-};
-
-const METHOD_VARIANT = {
-  cash: "secondary",
-  transfer: "secondary",
-  stripe: "default",
-  mercadopago: "default",
-};
+const METHOD_LABEL   = { cash: "Efectivo", transfer: "Transferencia", stripe: "Stripe", mercadopago: "MercadoPago" };
+const METHOD_VARIANT = { cash: "secondary", transfer: "secondary", stripe: "default", mercadopago: "default" };
 
 const fmtAmount = (amount, currency) =>
-  new Intl.NumberFormat("es-AR", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  new Intl.NumberFormat("es-AR", { style: "currency", currency, maximumFractionDigits: 2 }).format(amount);
 
 const fmtDate = (d) =>
-  new Intl.DateTimeFormat("es-AR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  }).format(new Date(d));
+  new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(d));
 
 const EMPTY_FORM = { invoice: null, amount: "", method: "cash", notes: "" };
 
@@ -56,9 +40,24 @@ const Field = ({ label, children }) => (
   </div>
 );
 
+const TableSkeleton = () => (
+  <div className="divide-y">
+    {Array.from({ length: 6 }).map((_, i) => (
+      <div key={i} className="flex items-center gap-4 px-4 py-3">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-5 w-24 rounded-full" />
+        <Skeleton className="h-4 w-20" />
+      </div>
+    ))}
+  </div>
+);
+
 // ─── component ───────────────────────────────────────────────────────────────
 
 export const PaymentsPage = () => {
+  const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
   const isAdmin = role === "clinic_admin";
 
@@ -94,11 +93,7 @@ export const PaymentsPage = () => {
   };
 
   const searchInvoices = useCallback(async (query) => {
-    const { data } = await invoicesApi.list({
-      limit: 10,
-      // Backend full-text search not available for invoices — list pending/overdue
-      // and let user identify by patient name + concept shown as sublabel
-    });
+    const { data } = await invoicesApi.list({ limit: 10 });
     return data.data
       .filter(
         (inv) =>
@@ -128,6 +123,7 @@ export const PaymentsPage = () => {
         method: form.method,
         notes: form.notes || undefined,
       });
+      toast.success("Pago registrado");
       setDialogOpen(false);
       load(1);
     } catch (err) {
@@ -141,15 +137,27 @@ export const PaymentsPage = () => {
     if (!confirm("¿Eliminar este pago? El cobro asociado puede revertir a pendiente.")) return;
     try {
       await paymentsApi.delete(payment._id);
+      toast.success("Pago eliminado");
       load(pagination.page);
-    } catch (err) {
-      alert(err.response?.data?.message ?? "Error al eliminar");
+    } catch {
+      toast.error("Error al eliminar el pago");
     }
+  };
+
+  const handleExport = () => {
+    exportToCsv(`pagos-${new Date().toISOString().slice(0, 10)}.csv`, payments, [
+      { label: "Paciente", getValue: (p) => p.patientId?.name ?? "" },
+      { label: "Cobro",    getValue: (p) => p.invoiceId?.concept ?? "" },
+      { label: "Importe",  getValue: (p) => p.amount },
+      { label: "Moneda",   getValue: (p) => p.currency },
+      { label: "Método",   getValue: (p) => METHOD_LABEL[p.method] },
+      { label: "Fecha",    getValue: (p) => fmtDate(p.createdAt) },
+    ]);
+    toast.success("Exportado correctamente");
   };
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
-  // When an invoice is selected, prefill the amount
   const handleInvoiceSelect = (inv) => {
     setForm((f) => ({ ...f, invoice: inv, amount: inv.amount?.toString() ?? "" }));
   };
@@ -160,9 +168,16 @@ export const PaymentsPage = () => {
         title="Pagos"
         description={`${pagination.total} pago${pagination.total !== 1 ? "s" : ""} registrado${pagination.total !== 1 ? "s" : ""}`}
         action={
-          <Button size="sm" onClick={openCreate}>
-            <Plus className="h-4 w-4" /> Registrar pago
-          </Button>
+          <div className="flex gap-2">
+            {payments.length > 0 && (
+              <Button variant="outline" size="sm" onClick={handleExport}>
+                <Download className="h-4 w-4" /> Exportar
+              </Button>
+            )}
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4" /> Registrar pago
+            </Button>
+          </div>
         }
       />
 
@@ -180,9 +195,7 @@ export const PaymentsPage = () => {
       {/* Table */}
       <div className="rounded-xl border bg-card">
         {loading ? (
-          <div className="flex h-48 items-center justify-center">
-            <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          </div>
+          <TableSkeleton />
         ) : payments.length === 0 ? (
           <EmptyState
             icon={CreditCard}
@@ -206,31 +219,17 @@ export const PaymentsPage = () => {
               <tbody className="divide-y">
                 {payments.map((pay) => (
                   <tr key={pay._id} className="group hover:bg-muted/40 transition-colors">
-                    <td className="px-4 py-3 font-medium">
-                      {pay.patientId?.name ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground max-w-[200px] truncate">
-                      {pay.invoiceId?.concept ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 font-medium tabular-nums">
-                      {fmtAmount(pay.amount, pay.currency)}
-                    </td>
+                    <td className="px-4 py-3 font-medium">{pay.patientId?.name ?? "—"}</td>
+                    <td className="px-4 py-3 text-muted-foreground max-w-[200px] truncate">{pay.invoiceId?.concept ?? "—"}</td>
+                    <td className="px-4 py-3 font-medium tabular-nums">{fmtAmount(pay.amount, pay.currency)}</td>
                     <td className="px-4 py-3">
-                      <Badge variant={METHOD_VARIANT[pay.method]}>
-                        {METHOD_LABEL[pay.method]}
-                      </Badge>
+                      <Badge variant={METHOD_VARIANT[pay.method]}>{METHOD_LABEL[pay.method]}</Badge>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground tabular-nums">
-                      {fmtDate(pay.createdAt)}
-                    </td>
+                    <td className="px-4 py-3 text-muted-foreground tabular-nums">{fmtDate(pay.createdAt)}</td>
                     {isAdmin && (
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            title="Eliminar pago"
-                            onClick={() => handleDelete(pay)}
-                            className="rounded p-1 hover:bg-destructive/10"
-                          >
+                          <button title="Eliminar pago" onClick={() => handleDelete(pay)} className="rounded p-1 hover:bg-destructive/10">
                             <Trash2 className="h-3.5 w-3.5 text-destructive" />
                           </button>
                         </div>
@@ -265,15 +264,7 @@ export const PaymentsPage = () => {
               </Field>
               <div className="grid grid-cols-2 gap-4">
                 <Field label="Importe *">
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.amount}
-                    onChange={set("amount")}
-                    placeholder="0.00"
-                    required
-                  />
+                  <Input type="number" min="0" step="0.01" value={form.amount} onChange={set("amount")} placeholder="0.00" required />
                 </Field>
                 <Field label="Método *">
                   <Select value={form.method} onChange={set("method")}>
@@ -285,12 +276,7 @@ export const PaymentsPage = () => {
                 </Field>
               </div>
               <Field label="Notas">
-                <Textarea
-                  value={form.notes}
-                  onChange={set("notes")}
-                  placeholder="Número de comprobante, referencia…"
-                  rows={2}
-                />
+                <Textarea value={form.notes} onChange={set("notes")} placeholder="Número de comprobante, referencia…" rows={2} />
               </Field>
               {formError && (
                 <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">{formError}</p>

@@ -157,15 +157,15 @@ export const RegisterPage = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 p-4">
       <div className="w-full max-w-md">
         {/* Brand */}
         <div className="mb-6 flex flex-col items-center gap-2">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-            <Building2 className="h-5 w-5 text-primary-foreground" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 shadow-lg shadow-indigo-900/50">
+            <Building2 className="h-5 w-5 text-white" />
           </div>
-          <h1 className="text-2xl font-bold">ClinicPay</h1>
-          <p className="text-sm text-muted-foreground">Creá la cuenta de tu clínica</p>
+          <h1 className="text-2xl font-bold text-white tracking-tight">ClinicPay</h1>
+          <p className="text-sm text-slate-400">Creá la cuenta de tu clínica</p>
         </div>
 
         <Card>
@@ -290,9 +290,9 @@ export const RegisterPage = () => {
           </CardContent>
         </Card>
 
-        <p className="mt-4 text-center text-sm text-muted-foreground">
+        <p className="mt-4 text-center text-sm text-slate-500">
           ¿Ya tenés cuenta?{" "}
-          <Link to="/login" className="font-medium text-primary hover:underline">
+          <Link to="/login" className="font-medium text-indigo-400 hover:text-indigo-300 transition-colors">
             Iniciá sesión
           </Link>
         </p>
