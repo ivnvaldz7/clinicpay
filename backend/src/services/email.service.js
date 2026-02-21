@@ -1,6 +1,12 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Lazy singleton — instantiated on first send so missing API key
+// doesn't crash the server at startup (useful in dev/test without Resend).
+let _resend;
+const getResend = () => {
+  if (!_resend) _resend = new Resend(process.env.RESEND_API_KEY);
+  return _resend;
+};
 
 // The "from" address must be a verified domain in your Resend account.
 // During development you can use the Resend sandbox address.
@@ -39,7 +45,7 @@ export const sendOverdueReminder = async ({
     year: "numeric",
   }).format(new Date(dueDate));
 
-  const { data, error } = await resend.emails.send({
+  const { data, error } = await getResend().emails.send({
     from: FROM,
     to,
     subject: `Recordatorio de pago pendiente — ${clinicName}`,

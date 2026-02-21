@@ -1,7 +1,16 @@
 import Stripe from "stripe";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2024-04-10",
+// Lazy singleton — instantiated on first use so missing STRIPE_SECRET_KEY
+// doesn't crash the server at startup (useful in dev/test without Stripe).
+let _stripe;
+export const stripe = new Proxy({}, {
+  get(_, prop) {
+    if (!_stripe) {
+      _stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: "2024-04-10" });
+    }
+    const val = _stripe[prop];
+    return typeof val === "function" ? val.bind(_stripe) : val;
+  },
 });
 
 /**
