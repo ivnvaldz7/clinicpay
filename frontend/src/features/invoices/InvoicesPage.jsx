@@ -5,6 +5,7 @@ import { invoicesApi } from "@/api/invoices.api";
 import { patientsApi } from "@/api/patients.api";
 import { useAuthStore } from "@/store/auth.store";
 import { useToast } from "@/hooks/useToast";
+import { useConfirm } from "@/hooks/useConfirm";
 import { exportToCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,7 @@ const TableSkeleton = () => (
 export const InvoicesPage = () => {
   const navigate = useNavigate();
   const toast = useToast();
+  const confirm = useConfirm();
   const role = useAuthStore((s) => s.user?.role);
   const isAdmin = role === "clinic_admin";
 
@@ -137,7 +139,11 @@ export const InvoicesPage = () => {
 
   const handleDelete = async (e, invoice) => {
     e.stopPropagation();
-    if (!confirm(`¿Eliminar el cobro "${invoice.concept}"?`)) return;
+    const ok = await confirm({
+      title: "¿Eliminar cobro?",
+      description: `"${invoice.concept}" será eliminado permanentemente.`,
+    });
+    if (!ok) return;
     try {
       await invoicesApi.delete(invoice._id);
       toast.success("Cobro eliminado");

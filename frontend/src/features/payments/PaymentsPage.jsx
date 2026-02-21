@@ -4,6 +4,7 @@ import { paymentsApi } from "@/api/payments.api";
 import { invoicesApi } from "@/api/invoices.api";
 import { useAuthStore } from "@/store/auth.store";
 import { useToast } from "@/hooks/useToast";
+import { useConfirm } from "@/hooks/useConfirm";
 import { exportToCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +59,7 @@ const TableSkeleton = () => (
 
 export const PaymentsPage = () => {
   const toast = useToast();
+  const confirm = useConfirm();
   const role = useAuthStore((s) => s.user?.role);
   const isAdmin = role === "clinic_admin";
 
@@ -134,7 +136,11 @@ export const PaymentsPage = () => {
   };
 
   const handleDelete = async (payment) => {
-    if (!confirm("¿Eliminar este pago? El cobro asociado puede revertir a pendiente.")) return;
+    const ok = await confirm({
+      title: "¿Eliminar pago?",
+      description: "El cobro asociado puede revertir a pendiente. Esta acción no se puede deshacer.",
+    });
+    if (!ok) return;
     try {
       await paymentsApi.delete(payment._id);
       toast.success("Pago eliminado");

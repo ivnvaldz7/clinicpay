@@ -4,6 +4,7 @@ import { Plus, Pencil, PowerOff, Trash2, Users, Download } from "lucide-react";
 import { patientsApi } from "@/api/patients.api";
 import { useAuthStore } from "@/store/auth.store";
 import { useToast } from "@/hooks/useToast";
+import { useConfirm } from "@/hooks/useConfirm";
 import { exportToCsv } from "@/lib/csv";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +46,7 @@ const TableSkeleton = () => (
 export const PatientsPage = () => {
   const navigate = useNavigate();
   const toast = useToast();
+  const confirm = useConfirm();
   const role = useAuthStore((s) => s.user?.role);
   const isAdmin = role === "clinic_admin";
 
@@ -134,7 +136,11 @@ export const PatientsPage = () => {
 
   const handleDelete = async (e, patient) => {
     e.stopPropagation();
-    if (!confirm(`¿Eliminar a ${patient.name}? Esta acción no se puede deshacer.`)) return;
+    const ok = await confirm({
+      title: `¿Eliminar a ${patient.name}?`,
+      description: "Esta acción no se puede deshacer.",
+    });
+    if (!ok) return;
     try {
       await patientsApi.delete(patient._id);
       toast.success("Paciente eliminado");
