@@ -1,4 +1,7 @@
 import Clinic from "../models/Clinic.js";
+import Payment from "../models/Payment.js";
+import Invoice from "../models/Invoice.js";
+import { reconcileInvoice } from "../services/invoice.service.js";
 import {
   stripe,
   getOrCreateCustomer,
@@ -129,6 +132,10 @@ export const handleWebhook = async (req, res) => {
         await markPastDue(event.data.object);
         break;
 
+      case "checkout.session.completed":
+        await handleInvoiceCheckoutCompleted(event.data.object);
+        break;
+
       default:
         // Ignore unhandled event types
         break;
@@ -143,6 +150,40 @@ export const handleWebhook = async (req, res) => {
 };
 
 // ─── webhook helpers ─────────────────────────────────────────────────────────
+
+const handleInvoiceCheckoutCompleted = async (session) => {
+  // Ignore subscription checkout sessions (no invoiceId in metadata)
+  if (!session.metadata?.invoiceId) return;
+
+  const { invoiceId, clinicId, patientId } = session.metadata;
+  const paymentIntentId = session.payment_intent;
+
+  // Idempotency guard — skip if already processed
+  const existing = await Payment.findOne({ stripePaymentIntentId: paymentIntentId });
+  if (existing) {
+    console.log(`[billing/webhook] checkout.session.completed already processed: ${paymentIntentId}`);
+    return;
+  }
+
+  const invoice = await Invoice.findById(invoiceId);
+  if (!invoice) {
+    console.warn(`[billing/webhook] Invoice not found: ${invoiceId}`);
+    return;
+  }
+
+  await Payment.create({
+    clinicId,
+    invoiceId,
+    patientId,
+    amount: session.amount_total / 100,
+    currency: invoice.currency,
+    method: "stripe",
+    stripePaymentIntentId: paymentIntentId,
+  });
+
+  await reconcileInvoice(invoice);
+  console.log(`[billing/webhook] Invoice ${invoiceId} paid via Stripe checkout`);
+};
 
 const findClinicBySubscription = async (subscription) => {
   // Try clinicId from subscription metadata first (most reliable)

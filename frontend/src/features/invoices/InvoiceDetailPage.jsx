@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, CheckCircle, XCircle, CreditCard, Trash2 } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, CreditCard, Trash2, Link2, Copy, ExternalLink, Loader2 } from "lucide-react";
 import { invoicesApi } from "@/api/invoices.api";
 import { paymentsApi } from "@/api/payments.api";
 import { useAuthStore } from "@/store/auth.store";
@@ -55,6 +55,9 @@ export const InvoiceDetailPage = () => {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [paymentLink, setPaymentLink] = useState(null);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -86,6 +89,25 @@ export const InvoiceDetailPage = () => {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleCreatePaymentLink = async () => {
+    setLinkLoading(true);
+    try {
+      const { data } = await invoicesApi.createPaymentLink(id);
+      setPaymentLink(data.url);
+    } catch (err) {
+      toast.error(err.response?.data?.message ?? "Error al generar el link");
+    } finally {
+      setLinkLoading(false);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!paymentLink) return;
+    await navigator.clipboard.writeText(paymentLink);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
   };
 
   const handleDeletePayment = async (paymentId) => {
@@ -204,6 +226,50 @@ export const InvoiceDetailPage = () => {
           </div>
         </CardContent>
       </Card>
+
+      {/* Payment link */}
+      {invoice.status !== "paid" && invoice.status !== "canceled" && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Link2 className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold">Link de pago Stripe</h2>
+            </div>
+
+            {paymentLink ? (
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    readOnly
+                    value={paymentLink}
+                    className="flex-1 rounded-md border bg-muted/40 px-3 py-1.5 text-sm font-mono truncate outline-none"
+                  />
+                  <Button size="sm" variant="outline" onClick={handleCopyLink}>
+                    <Copy className="h-3.5 w-3.5" />
+                    {linkCopied ? "¡Copiado!" : "Copiar"}
+                  </Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <a href={paymentLink} target="_blank" rel="noreferrer">
+                      <ExternalLink className="h-3.5 w-3.5" /> Abrir
+                    </a>
+                  </Button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <p className="text-xs text-muted-foreground">El link expira en 24 horas.</p>
+                  <Button size="sm" variant="ghost" className="h-auto p-0 text-xs" onClick={handleCreatePaymentLink} disabled={linkLoading}>
+                    Regenerar link
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button size="sm" onClick={handleCreatePaymentLink} disabled={linkLoading}>
+                {linkLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
+                Generar link de pago
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Payments */}
       <div>

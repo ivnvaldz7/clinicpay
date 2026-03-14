@@ -7,7 +7,18 @@
       "Bash(npm run build:*)",
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(git -c:*)",
+      "Bash(mongosh:*)",
+      "Bash(powershell.exe -Command \"Get-Service -Name ''MongoDB'' -ErrorAction SilentlyContinue | Select-Object Status, Name\")",
+      "Bash(powershell.exe -Command \"Get-Process mongod -ErrorAction SilentlyContinue | Select-Object Id, Name\")",
+      "Bash(powershell.exe -Command \"Get-Process | Where-Object { $_.Name -like ''*mongo*'' } | Select-Object Id, Name, CPU\")",
+      "Bash(cmd /c \"sc query MongoDB\")",
+      "Bash(cmd /c \"net start MongoDB\")",
+      "Bash(cmd /c \"netstat -an\")",
+      "Bash(cmd /c \"netstat -ano | findstr :4000\")",
+      "Bash(cmd /c \"netstat -ano\")",
+      "Bash(git commit:*)"
     ]
   }
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, Users, FileText, X, ArrowRight } from "lucide-react";
 import { patientsApi } from "@/api/patients.api";
@@ -21,7 +21,10 @@ const STATUS_COLOR = {
 
 // ─── result item ──────────────────────────────────────────────────────────────
 
-const ResultItem = ({ icon: Icon, primary, secondary, badge, badgeColor, isSelected, onClick }) => (
+const ResultItem = ({ icon, primary, secondary, badge, badgeColor, isSelected, onClick }) => {
+  const Icon = icon;
+
+  return (
   <button
     onClick={onClick}
     className={cn(
@@ -41,7 +44,8 @@ const ResultItem = ({ icon: Icon, primary, secondary, badge, badgeColor, isSelec
     )}
     <ArrowRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
   </button>
-);
+  );
+};
 
 // ─── group header ─────────────────────────────────────────────────────────────
 
@@ -104,10 +108,10 @@ export const CommandPalette = ({ open, onClose }) => {
   }, [query]);
 
   // Flatten results for keyboard navigation
-  const allResults = [
+  const allResults = useMemo(() => [
     ...patients.map((p) => ({ type: "patient", item: p })),
     ...invoices.map((inv) => ({ type: "invoice", item: inv })),
-  ];
+  ], [patients, invoices]);
 
   const go = useCallback(
     (type, item) => {

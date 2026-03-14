@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import Clinic from "../models/Clinic.js";
 import User from "../models/User.js";
+import { assertRequiredFields } from "../utils/validation.js";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -42,9 +43,13 @@ export const register = async (req, res, next) => {
   try {
     const { clinicName, clinicEmail, name, email, password } = req.body;
 
-    if (!clinicName || !clinicEmail || !name || !email || !password) {
-      return res.status(400).json({ message: "All fields are required" });
-    }
+    assertRequiredFields([
+      [clinicName, "All fields are required"],
+      [clinicEmail, "All fields are required"],
+      [name, "All fields are required"],
+      [email, "All fields are required"],
+      [password, "All fields are required"],
+    ]);
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
@@ -95,9 +100,10 @@ export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
-    }
+    assertRequiredFields([
+      [email, "Email and password are required"],
+      [password, "Email and password are required"],
+    ]);
 
     const user = await User.findOne({ email });
     if (!user || !user.isActive) {

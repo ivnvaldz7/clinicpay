@@ -15,6 +15,7 @@ export const AuthProvider = ({ children }) => {
     const hydrate = async () => {
       try {
         const { data: refreshData } = await authApi.refresh();
+        useAuthStore.getState().setAccessToken(refreshData.accessToken);
         const { data: meData } = await authApi.me();
         setAuth(refreshData.accessToken, meData.user);
       } catch {

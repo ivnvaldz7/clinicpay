@@ -5,6 +5,17 @@ import { sendOverdueReminder } from "../services/email.service.js";
 // Don't resend a reminder if one was sent within this many hours
 const REMINDER_COOLDOWN_HOURS = 24;
 
+const REMINDER_MIN_PLAN = "basic";
+
+const isReminderPlanEligible = (clinic) => {
+  if (!clinic) return false;
+
+  const hasPaidPlan = clinic.plan === REMINDER_MIN_PLAN || clinic.plan === "pro";
+  const hasActiveSubscription = clinic.subscriptionStatus === "active" || clinic.subscriptionStatus === "trialing";
+
+  return hasPaidPlan && hasActiveSubscription;
+};
+
 /**
  * Core job logic — exported so it can be triggered manually or tested.
  *
@@ -14,21 +25,27 @@ const REMINDER_COOLDOWN_HOURS = 24;
  *   3. Sends the email via Resend
  *   4. Stamps reminderSentAt to prevent duplicate sends
  */
-export const processOverdueInvoices = async () => {
+export const processOverdueInvoices = async ({ clinicId } = {}) => {
   const now = new Date();
   const cooldownCutoff = new Date(now.getTime() - REMINDER_COOLDOWN_HOURS * 60 * 60 * 1000);
 
   console.log(`[overdueInvoices] Running at ${now.toISOString()}`);
 
-  // Find all effectively overdue invoices and populate patient + clinic
-  const invoices = await Invoice.find({
+  const invoiceFilter = {
     $or: [
       { status: "overdue" },
       { status: "pending", dueDate: { $lt: now } },
     ],
-  })
+  };
+
+  if (clinicId) {
+    invoiceFilter.clinicId = clinicId;
+  }
+
+  // Find all effectively overdue invoices and populate patient + clinic
+  const invoices = await Invoice.find(invoiceFilter)
     .populate("patientId", "name email")
-    .populate("clinicId", "name");
+    .populate("clinicId", "name plan subscriptionStatus");
 
   let sent = 0;
   let skipped = 0;
@@ -43,6 +60,12 @@ export const processOverdueInvoices = async () => {
 
     const patient = invoice.patientId;
     const clinic = invoice.clinicId;
+
+    if (!isReminderPlanEligible(clinic)) {
+      await invoice.save();
+      skipped++;
+      continue;
+    }
 
     // Skip if patient has no email
     if (!patient?.email) {

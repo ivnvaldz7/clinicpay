@@ -115,6 +115,14 @@ async function seedDemoData() {
 
 export const demoLogin = async (req, res, next) => {
   try {
+    const demoEnabled =
+      process.env.ENABLE_DEMO_LOGIN === "true" ||
+      process.env.NODE_ENV !== "production";
+
+    if (!demoEnabled) {
+      return res.status(404).json({ message: "Not found" });
+    }
+
     let user = await User.findOne({ email: DEMO_EMAIL });
 
     if (!user) {

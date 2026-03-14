@@ -48,8 +48,11 @@ backend/
     controllers/
     routes/
     services/
+      invoice.service.js
       stripe.service.js
       email.service.js
+    utils/
+      validation.js
     jobs/
       overdueInvoices.js
     app.js
@@ -66,6 +69,7 @@ frontend/
     api/
     components/
       ui/
+        variants.js
       shared/
     features/
       auth/
@@ -92,11 +96,18 @@ frontend/
 5. `auth.js` middleware verifies the token and injects `req.user = { userId, clinicId, role }`.
 6. `tenant.js` middleware reads `req.user.clinicId` and sets `req.clinicId` — used in every query.
 7. When `accessToken` expires, client hits `POST /auth/refresh` using the httpOnly cookie to get a new one.
+8. On app bootstrap, the frontend stores the refreshed `accessToken` before calling `GET /auth/me`, avoiding session loss on reload.
 
 **Roles:**
 
 - `clinic_admin` — full access within their clinic (patients, invoices, billing, staff management)
 - `staff` — can create/view patients and invoices, cannot access billing or settings
+
+Current route-level behavior:
+
+- `staff` can create invoices and register payments.
+- `staff` cannot access billing endpoints or hard-delete patient/payment records.
+- `clinic_admin` can access billing, cancel invoices, run overdue jobs, and perform destructive actions.
 
 ---
 
@@ -122,6 +133,40 @@ router.get("/patients", auth, tenant, getPatients);
 // Example usage in controller
 const patients = await Patient.find({ clinicId: req.clinicId });
 ```
+
+This isolation is covered by integration tests that verify one clinic cannot read or pay another clinic's invoices.
+
+---
+
+## Validation + Domain Rules
+
+- Shared request validation helpers now live in `backend/src/utils/validation.js`.
+- Invoice domain rules now live in `backend/src/services/invoice.service.js`.
+- Controllers use those modules to reduce duplicated validation and keep business rules consistent.
+
+Examples:
+
+- invoice transitions are centralized
+- payment reconciliation is centralized
+- pagination and date-range parsing are shared
+
+---
+
+## Testing Status
+
+Backend has a minimal automated suite using Node's built-in test runner plus `mongodb-memory-server`.
+
+Covered scenarios include:
+
+- auth register / login / refresh / me
+- tenant isolation across invoices and payments
+- invoice payment reconciliation
+- invoice transition rules
+- overdue job plan gating
+- Stripe checkout webhook idempotency
+- role-based access control
+- dashboard summary / revenue / overdue endpoints
+- billing status and validation failures for checkout / portal
 
 ---
 

@@ -1,6 +1,12 @@
 import mongoose from "mongoose";
 import Invoice from "../models/Invoice.js";
 import Payment from "../models/Payment.js";
+import {
+  applyDateRange,
+  assertEnum,
+  assertRequiredFields,
+  parsePagination,
+} from "../utils/validation.js";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -37,7 +43,9 @@ export const getSummary = async (req, res, next) => {
     const { currency } = req.query;
     const clinicId = toObjectId(req.clinicId);
 
-    const currencyMatch = currency ? { currency } : {};
+    const currencyMatch = currency
+      ? { currency: assertEnum(currency, ["ARS", "USD"], "currency") }
+      : {};
 
     const [invoiceStats, overdueStats, patientCount] = await Promise.all([
       // Aggregate invoices by status
@@ -137,22 +145,19 @@ export const getRevenue = async (req, res, next) => {
   try {
     const { from, to, groupBy = "day", currency } = req.query;
 
-    if (!from || !to) {
-      return res.status(400).json({ message: "from and to dates are required" });
-    }
-
-    const validGroupBy = ["day", "week", "month"];
-    if (!validGroupBy.includes(groupBy)) {
-      return res.status(400).json({ message: "groupBy must be day, week or month" });
-    }
+    assertRequiredFields([
+      [from, "from and to dates are required"],
+      [to, "from and to dates are required"],
+    ]);
+    assertEnum(groupBy, ["day", "week", "month"], "groupBy");
 
     const dateFormat = { day: "%Y-%m-%d", week: "%Y-%U", month: "%Y-%m" }[groupBy];
 
     const match = {
       clinicId: toObjectId(req.clinicId),
-      createdAt: { $gte: new Date(from), $lte: new Date(to) },
     };
-    if (currency) match.currency = currency;
+    applyDateRange(match, { from, to });
+    if (currency) match.currency = assertEnum(currency, ["ARS", "USD"], "currency");
 
     const rows = await Payment.aggregate([
       { $match: match },
@@ -194,11 +199,9 @@ export const getOverdue = async (req, res, next) => {
     const { currency, page = 1, limit = 20 } = req.query;
 
     const filter = overdueFilter(toObjectId(req.clinicId));
-    if (currency) filter.currency = currency;
+    if (currency) filter.currency = assertEnum(currency, ["ARS", "USD"], "currency");
 
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip = (pageNum - 1) * limitNum;
+    const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
 
     const [invoices, total] = await Promise.all([
       Invoice.find(filter)

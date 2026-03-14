@@ -7,4 +7,5 @@ export const invoicesApi = {
   update: (id, data) => api.patch(`/invoices/${id}`, data),
   updateStatus: (id, status) => api.patch(`/invoices/${id}/status`, { status }),
   delete: (id) => api.delete(`/invoices/${id}`),
+  createPaymentLink: (id) => api.post(`/invoices/${id}/payment-link`),
 };

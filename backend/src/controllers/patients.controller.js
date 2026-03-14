@@ -1,9 +1,9 @@
-import mongoose from "mongoose";
 import Patient from "../models/Patient.js";
-
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
+import {
+  assertObjectId,
+  normalizeNullableString,
+  parsePagination,
+} from "../utils/validation.js";
 
 // ─── controllers ────────────────────────────────────────────────────────────
 
@@ -30,9 +30,7 @@ export const listPatients = async (req, res, next) => {
       filter.$or = [{ name: regex }, { email: regex }, { dni: regex }];
     }
 
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip = (pageNum - 1) * limitNum;
+    const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
 
     const [patients, total] = await Promise.all([
       Patient.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
@@ -59,7 +57,7 @@ export const listPatients = async (req, res, next) => {
 export const getPatient = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!isValidId(id)) return res.status(400).json({ message: "Invalid patient id" });
+    assertObjectId(id, "patient id");
 
     const patient = await Patient.findOne({ _id: id, clinicId: req.clinicId });
     if (!patient) return res.status(404).json({ message: "Patient not found" });
@@ -85,10 +83,10 @@ export const createPatient = async (req, res, next) => {
     const patient = await Patient.create({
       clinicId: req.clinicId,
       name: name.trim(),
-      email: email?.trim() || null,
-      phone: phone?.trim() || null,
-      dni: dni?.trim() || null,
-      notes: notes?.trim() || null,
+      email: normalizeNullableString(email),
+      phone: normalizeNullableString(phone),
+      dni: normalizeNullableString(dni),
+      notes: normalizeNullableString(notes),
     });
 
     return res.status(201).json({ data: patient });
@@ -104,16 +102,16 @@ export const createPatient = async (req, res, next) => {
 export const updatePatient = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!isValidId(id)) return res.status(400).json({ message: "Invalid patient id" });
+    assertObjectId(id, "patient id");
 
     const { name, email, phone, dni, notes } = req.body;
 
     const updates = {};
     if (name !== undefined) updates.name = name.trim();
-    if (email !== undefined) updates.email = email?.trim() || null;
-    if (phone !== undefined) updates.phone = phone?.trim() || null;
-    if (dni !== undefined) updates.dni = dni?.trim() || null;
-    if (notes !== undefined) updates.notes = notes?.trim() || null;
+    if (email !== undefined) updates.email = normalizeNullableString(email);
+    if (phone !== undefined) updates.phone = normalizeNullableString(phone);
+    if (dni !== undefined) updates.dni = normalizeNullableString(dni);
+    if (notes !== undefined) updates.notes = normalizeNullableString(notes);
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ message: "No valid fields to update" });
@@ -140,7 +138,7 @@ export const updatePatient = async (req, res, next) => {
 export const toggleActive = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!isValidId(id)) return res.status(400).json({ message: "Invalid patient id" });
+    assertObjectId(id, "patient id");
 
     const patient = await Patient.findOne({ _id: id, clinicId: req.clinicId });
     if (!patient) return res.status(404).json({ message: "Patient not found" });
@@ -161,7 +159,7 @@ export const toggleActive = async (req, res, next) => {
 export const deletePatient = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!isValidId(id)) return res.status(400).json({ message: "Invalid patient id" });
+    assertObjectId(id, "patient id");
 
     const patient = await Patient.findOneAndDelete({ _id: id, clinicId: req.clinicId });
     if (!patient) return res.status(404).json({ message: "Patient not found" });

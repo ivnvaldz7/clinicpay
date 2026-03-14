@@ -20,7 +20,10 @@ const fmt = (n) =>
     maximumFractionDigits: 0,
   }).format(n ?? 0);
 
-const KpiCard = ({ title, amount, count, icon: Icon, badgeVariant }) => (
+const KpiCard = ({ title, amount, count, icon, badgeVariant }) => {
+  const Icon = icon;
+
+  return (
   <Card>
     <CardHeader className="flex flex-row items-center justify-between pb-2">
       <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
@@ -33,7 +36,8 @@ const KpiCard = ({ title, amount, count, icon: Icon, badgeVariant }) => (
       </Badge>
     </CardContent>
   </Card>
-);
+  );
+};
 
 export const DashboardPage = () => {
   const [summary, setSummary] = useState(null);

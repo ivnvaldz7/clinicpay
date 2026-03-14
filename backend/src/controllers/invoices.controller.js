@@ -1,10 +1,18 @@
-import mongoose from "mongoose";
 import Invoice from "../models/Invoice.js";
 import Patient from "../models/Patient.js";
-
-// ─── helpers ────────────────────────────────────────────────────────────────
-
-const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
+import { stripe } from "../services/stripe.service.js";
+import {
+  assertInvoiceCanBeEdited,
+  findInvoiceForClinic,
+  resolveInvoiceTransition,
+} from "../services/invoice.service.js";
+import {
+  applyDateRange,
+  assertEnum,
+  assertObjectId,
+  assertPositiveNumber,
+  parsePagination,
+} from "../utils/validation.js";
 
 // ─── controllers ────────────────────────────────────────────────────────────
 
@@ -26,30 +34,20 @@ export const listInvoices = async (req, res, next) => {
     const filter = { clinicId: req.clinicId };
 
     if (patientId) {
-      if (!isValidId(patientId)) return res.status(400).json({ message: "Invalid patientId" });
-      filter.patientId = patientId;
+      filter.patientId = assertObjectId(patientId, "patientId");
     }
 
     if (status) {
-      const valid = ["pending", "paid", "overdue", "canceled"];
-      if (!valid.includes(status)) return res.status(400).json({ message: "Invalid status" });
-      filter.status = status;
+      filter.status = assertEnum(status, ["pending", "paid", "overdue", "canceled"], "status");
     }
 
     if (currency) {
-      if (!["ARS", "USD"].includes(currency)) return res.status(400).json({ message: "Invalid currency" });
-      filter.currency = currency;
+      filter.currency = assertEnum(currency, ["ARS", "USD"], "currency");
     }
 
-    if (from || to) {
-      filter.createdAt = {};
-      if (from) filter.createdAt.$gte = new Date(from);
-      if (to) filter.createdAt.$lte = new Date(to);
-    }
+    applyDateRange(filter, { from, to });
 
-    const pageNum = Math.max(1, parseInt(page));
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
-    const skip = (pageNum - 1) * limitNum;
+    const { page: pageNum, limit: limitNum, skip } = parsePagination({ page, limit });
 
     const [invoices, total] = await Promise.all([
       Invoice.find(filter)
@@ -81,7 +79,7 @@ export const listInvoices = async (req, res, next) => {
 export const getInvoice = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!isValidId(id)) return res.status(400).json({ message: "Invalid invoice id" });
+    assertObjectId(id, "invoice id");
 
     const invoice = await Invoice.findOne({ _id: id, clinicId: req.clinicId })
       .populate("patientId", "name email dni phone")
@@ -107,13 +105,9 @@ export const createInvoice = async (req, res, next) => {
       return res.status(400).json({ message: "patientId, concept, amount and dueDate are required" });
     }
 
-    if (!isValidId(patientId)) return res.status(400).json({ message: "Invalid patientId" });
+    assertObjectId(patientId, "patientId");
+    assertPositiveNumber(amount, "amount");
 
-    if (typeof amount !== "number" || amount <= 0) {
-      return res.status(400).json({ message: "amount must be a positive number" });
-    }
-
-    // Ensure patient belongs to this clinic
     const patient = await Patient.findOne({ _id: patientId, clinicId: req.clinicId });
     if (!patient) return res.status(404).json({ message: "Patient not found" });
 
@@ -141,28 +135,18 @@ export const createInvoice = async (req, res, next) => {
 export const updateInvoice = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!isValidId(id)) return res.status(400).json({ message: "Invalid invoice id" });
+    assertObjectId(id, "invoice id");
 
-    const invoice = await Invoice.findOne({ _id: id, clinicId: req.clinicId });
-    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
-
-    if (invoice.status !== "pending") {
-      return res.status(409).json({ message: "Only pending invoices can be edited" });
-    }
+    const invoice = await findInvoiceForClinic(id, req.clinicId);
+    assertInvoiceCanBeEdited(invoice);
 
     const { concept, amount, currency, dueDate } = req.body;
 
     const updates = {};
     if (concept !== undefined) updates.concept = concept.trim();
-    if (amount !== undefined) {
-      if (typeof amount !== "number" || amount <= 0) {
-        return res.status(400).json({ message: "amount must be a positive number" });
-      }
-      updates.amount = amount;
-    }
+    if (amount !== undefined) updates.amount = assertPositiveNumber(amount, "amount");
     if (currency !== undefined) {
-      if (!["ARS", "USD"].includes(currency)) return res.status(400).json({ message: "Invalid currency" });
-      updates.currency = currency;
+      updates.currency = assertEnum(currency, ["ARS", "USD"], "currency");
     }
     if (dueDate !== undefined) updates.dueDate = new Date(dueDate);
 
@@ -181,31 +165,20 @@ export const updateInvoice = async (req, res, next) => {
 
 /**
  * PATCH /invoices/:id/status
- * Body: { status: "paid" | "canceled" | "pending" | "overdue" }
- * Only clinic_admin can cancel; staff can mark as paid.
- * Allowed transitions are enforced here.
+ * Body: { status: "paid" | "canceled" | "overdue" }
+ * Staff can only mark pending/overdue invoices as paid.
+ * clinic_admin can also cancel pending/overdue invoices or mark pending invoices as overdue.
  */
 export const updateStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!isValidId(id)) return res.status(400).json({ message: "Invalid invoice id" });
+    assertObjectId(id, "invoice id");
 
     const { status } = req.body;
-    const validStatuses = ["pending", "paid", "overdue", "canceled"];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: "Invalid status" });
-    }
+    assertEnum(status, ["paid", "overdue", "canceled"], "status");
 
-    const invoice = await Invoice.findOne({ _id: id, clinicId: req.clinicId });
-    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
-
-    // Business rules
-    if (invoice.status === "canceled") {
-      return res.status(409).json({ message: "Canceled invoices cannot be changed" });
-    }
-    if (status === "canceled" && req.user.role !== "clinic_admin") {
-      return res.status(403).json({ message: "Only clinic_admin can cancel invoices" });
-    }
+    const invoice = await findInvoiceForClinic(id, req.clinicId);
+    resolveInvoiceTransition(invoice, status, req.user.role);
 
     invoice.status = status;
     if (status === "paid") invoice.paidAt = new Date();
@@ -220,16 +193,73 @@ export const updateStatus = async (req, res, next) => {
 };
 
 /**
+ * POST /invoices/:id/payment-link
+ * Creates a Stripe Checkout Session for a one-time invoice payment.
+ * Returns { url } — does NOT persist the URL (sessions expire in 24 h).
+ */
+export const createPaymentLink = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    assertObjectId(id, "invoice id");
+
+    const invoice = await findInvoiceForClinic(id, req.clinicId);
+
+    if (invoice.status === "canceled") {
+      return res.status(409).json({ message: "Cannot create a payment link for a canceled invoice" });
+    }
+    if (invoice.status === "paid") {
+      return res.status(409).json({ message: "Invoice is already paid" });
+    }
+
+    const stripeCurrency = invoice.currency === "ARS" ? "ars" : invoice.currency.toLowerCase();
+
+    try {
+      const session = await stripe.checkout.sessions.create({
+        mode: "payment",
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: stripeCurrency,
+              unit_amount: Math.round(invoice.amount * 100),
+              product_data: { name: invoice.concept },
+            },
+          },
+        ],
+        metadata: {
+          invoiceId: invoice._id.toString(),
+          clinicId: req.clinicId.toString(),
+          patientId: invoice.patientId.toString(),
+        },
+        success_url: `${process.env.CLIENT_ORIGIN}/pay/success?invoiceId=${invoice._id}`,
+        cancel_url: `${process.env.CLIENT_ORIGIN}/invoices/${invoice._id}`,
+      });
+
+      return res.json({ url: session.url });
+    } catch (stripeErr) {
+      if (stripeErr.code === "currency_not_supported") {
+        return res.status(409).json({
+          message: `Stripe does not support charging this invoice in ${invoice.currency} for the current account`,
+        });
+      }
+
+      throw stripeErr;
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * DELETE /invoices/:id
  * Hard delete — only clinic_admin, only when status is pending or canceled.
  */
 export const deleteInvoice = async (req, res, next) => {
   try {
     const { id } = req.params;
-    if (!isValidId(id)) return res.status(400).json({ message: "Invalid invoice id" });
+    assertObjectId(id, "invoice id");
 
-    const invoice = await Invoice.findOne({ _id: id, clinicId: req.clinicId });
-    if (!invoice) return res.status(404).json({ message: "Invoice not found" });
+    const invoice = await findInvoiceForClinic(id, req.clinicId);
 
     if (!["pending", "canceled"].includes(invoice.status)) {
       return res.status(409).json({ message: "Only pending or canceled invoices can be deleted" });

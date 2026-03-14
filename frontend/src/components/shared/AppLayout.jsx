@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Users, FileText, CreditCard, Receipt, LogOut, Building2, Search,
@@ -10,7 +10,10 @@ import { CommandPalette } from "@/components/shared/CommandPalette";
 
 // ─── nav item ─────────────────────────────────────────────────────────────────
 
-const NavItem = ({ to, icon: Icon, label, end, badge }) => (
+const NavItem = ({ to, icon, label, end, badge }) => {
+  const Icon = icon;
+
+  return (
   <NavLink
     to={to}
     end={end}
@@ -31,7 +34,8 @@ const NavItem = ({ to, icon: Icon, label, end, badge }) => (
       </span>
     )}
   </NavLink>
-);
+  );
+};
 
 // ─── layout ───────────────────────────────────────────────────────────────────
 

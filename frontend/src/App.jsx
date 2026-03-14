@@ -11,6 +11,7 @@ import { InvoicesPage } from "@/features/invoices/InvoicesPage";
 import { InvoiceDetailPage } from "@/features/invoices/InvoiceDetailPage";
 import { PaymentsPage } from "@/features/payments/PaymentsPage";
 import { BillingPage } from "@/features/billing/BillingPage";
+import { PaySuccess } from "@/features/invoices/PaySuccess";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/pay/success" element={<PaySuccess />} />
 
           {/* Protected — all authenticated users */}
           <Route element={<ProtectedRoute />}>

@@ -3,7 +3,6 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Pencil, PowerOff, FileText, Plus } from "lucide-react";
 import { patientsApi } from "@/api/patients.api";
 import { invoicesApi } from "@/api/invoices.api";
-import { useAuthStore } from "@/store/auth.store";
 import { useToast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,8 +45,6 @@ export const PatientDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const role = useAuthStore((s) => s.user?.role);
-  const isAdmin = role === "clinic_admin";
 
   const [patient, setPatient] = useState(null);
   const [invoices, setInvoices] = useState([]);
