@@ -20,9 +20,16 @@ const signRefreshToken = (payload) =>
 
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
-  sameSite: "strict",
-  secure: process.env.NODE_ENV === "production",
+  sameSite: process.env.COOKIE_SAME_SITE ?? "strict",
+  secure:
+    process.env.COOKIE_SECURE === "true" || process.env.NODE_ENV === "production",
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in ms
+};
+
+const REFRESH_COOKIE_CLEAR_OPTIONS = {
+  httpOnly: REFRESH_COOKIE_OPTIONS.httpOnly,
+  sameSite: REFRESH_COOKIE_OPTIONS.sameSite,
+  secure: REFRESH_COOKIE_OPTIONS.secure,
 };
 
 const buildTokenPayload = (user) => ({
@@ -174,7 +181,7 @@ export const refresh = async (req, res, next) => {
  * Clears the refresh token cookie.
  */
 export const logout = (_req, res) => {
-  res.clearCookie("refreshToken", REFRESH_COOKIE_OPTIONS);
+  res.clearCookie("refreshToken", REFRESH_COOKIE_CLEAR_OPTIONS);
   return res.json({ message: "Logged out" });
 };
 

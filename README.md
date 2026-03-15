@@ -160,6 +160,105 @@ cd frontend
 npm run dev
 ```
 
+## Production Deployment
+
+For a serious portfolio deployment, ClinicPay should run as three services:
+
+- Frontend on Netlify
+- Backend API on Render or Railway
+- MongoDB on MongoDB Atlas
+
+This keeps the architecture clear, production-like, and easy to explain in a portfolio review.
+
+### Recommended production stack
+
+- Netlify for the React application
+- Render or Railway for the Express API
+- MongoDB Atlas for the database
+- Stripe for subscriptions and invoice payments
+- Resend for transactional emails
+
+### Netlify frontend
+
+This repository already includes:
+
+- [netlify.toml](C:/Users/Usuario/Desktop/clinic-pay/netlify.toml) for build settings
+- [frontend/public/_redirects](C:/Users/Usuario/Desktop/clinic-pay/frontend/public/_redirects) so React Router works on refresh
+
+Set this environment variable in Netlify:
+
+```bash
+VITE_API_URL=https://your-backend-domain.com
+```
+
+### Backend service
+
+Deploy the `backend/` app as a Node service with:
+
+- Build command: `npm install`
+- Start command: `npm start`
+
+Production backend environment variables should include:
+
+```bash
+PORT=4000
+MONGODB_URI=mongodb+srv://...
+JWT_ACCESS_SECRET=your-long-random-secret
+JWT_REFRESH_SECRET=your-long-random-secret
+JWT_ACCESS_EXPIRES=15m
+JWT_REFRESH_EXPIRES=7d
+CLIENT_ORIGIN=https://your-netlify-site.netlify.app
+COOKIE_SAME_SITE=none
+COOKIE_SECURE=true
+STRIPE_SECRET_KEY=sk_live_or_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_PRICE_BASIC=price_...
+STRIPE_PRICE_PRO=price_...
+RESEND_API_KEY=re_...
+EMAIL_FROM=ClinicPay <noreply@yourdomain.com>
+OVERDUE_CRON_SCHEDULE=0 8 * * *
+```
+
+`COOKIE_SAME_SITE=none` and `COOKIE_SECURE=true` are required when the frontend and backend run on different domains, which is the standard Netlify + API hosting setup.
+
+### MongoDB Atlas
+
+Create a shared cluster in MongoDB Atlas and whitelist the backend host IPs or allow access from anywhere while you are still in portfolio/demo mode.
+
+Use the Atlas connection string in:
+
+```bash
+MONGODB_URI=mongodb+srv://...
+```
+
+### Stripe webhook
+
+After the backend is deployed, configure your Stripe webhook endpoint as:
+
+```text
+https://your-backend-domain.com/billing/webhook
+```
+
+Subscribe it to at least:
+
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.payment_failed`
+
+### Deployment checklist
+
+- frontend deployed on Netlify
+- backend deployed on Render or Railway
+- MongoDB Atlas connected
+- `CLIENT_ORIGIN` points to the Netlify URL
+- `VITE_API_URL` points to the backend URL
+- cookie settings use `none` + `true` in production
+- Stripe webhook configured against the deployed backend
+- frontend lint passes
+- backend tests pass
+
 ## Quality Checks
 
 Frontend lint:
