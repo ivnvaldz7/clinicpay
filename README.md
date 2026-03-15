@@ -4,6 +4,12 @@ ClinicPay is a multi-tenant SaaS platform for clinics that centralizes patient b
 
 Built as a full-stack project for portfolio presentation, it focuses on real product concerns beyond CRUD: role-based access control, tenant isolation, billing automation, Stripe checkout flows, reminder jobs, and backend test coverage for critical business rules.
 
+## Live Demo
+
+- Live app: [https://clinicpay.netlify.app](https://clinicpay.netlify.app)
+- API health: [https://clinicpay.onrender.com/health](https://clinicpay.onrender.com/health)
+- Repository: [https://github.com/ivnvaldz7/clinicpay](https://github.com/ivnvaldz7/clinicpay)
+
 ## Highlights
 
 - Multi-tenant architecture with `clinicId`-scoped data access
